@@ -152,6 +152,20 @@ func (g *Game) AddUserToGame(userId int) error {
 	return err
 }
 
+func (g *Game) RemoveUserFromGame(userId int) error {
+	stmt, err := db.Prepare("DELETE FROM GamesUsers WHERE GameId=? AND UserId=?")
+	if err != nil {
+		return err
+	}
+
+	_, err = stmt.Exec(g.Id, userId)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (g *Game) Players() (players []*User, err error) {
 	rows, err := db.Query("SELECT UserId FROM GamesUsers WHERE GameId=" + strconv.Itoa(g.Id))
 	if err != nil {
