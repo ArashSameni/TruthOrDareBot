@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/ArashSameni/TruthOrDareBot/dbhandler"
 	"github.com/ArashSameni/TruthOrDareBot/handlers"
 	"github.com/joho/godotenv"
 	tele "gopkg.in/telebot.v3"
@@ -35,6 +36,11 @@ func main() {
 		log.Fatalf("error opening file: %v", err)
 	}
 
+	err = dbhandler.InitDB()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	pref := tele.Settings{
 		Token:  os.Getenv("TOKEN"),
 		Poller: &tele.LongPoller{Timeout: 10 * time.Second},
@@ -46,7 +52,11 @@ func main() {
 	}
 
 	b.Handle("/start", handlers.OnStart)
-	b.Handle(tele.OnChannelPost, handlers.OnChannelPost)
+	b.Handle("/AddGp", handlers.OnAddGp)
+	b.Handle("/NewGame", handlers.OnNewGame)
+	b.Handle(&handlers.BtnAutoGameType, handlers.OnAutoGameSelect)
+	b.Handle(&handlers.BtnManualGameType, handlers.OnManualGameSelect)
+	b.Handle(&handlers.BtnJoinGame, handlers.OnJoinGame)
 
 	fmt.Println("Bot started")
 	log.Print("Bot started")
