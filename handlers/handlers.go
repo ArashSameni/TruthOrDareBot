@@ -48,6 +48,7 @@ var (
 	MsgOnlyStarterCan   = `فقط سازنده بازی به این گزینه دسترسی دارد`
 	MsgNotEnoughPlayers = `تعداد بازیکنان کافی نمیباشد`
 	MsgManualGame       = `%s باید از %s بپرسه`
+	MsgGameEnded        = `بازی به پایان رسید`
 )
 
 const MinimumPlayersForStart = 2
@@ -64,7 +65,7 @@ func init() {
 
 	ManualGameSelector.Inline(
 		GameTypeSelector.Row(BtnRoll),
-		GameTypeSelector.Row(BtnLeaveGame),
+		GameTypeSelector.Row(BtnEndGame),
 	)
 }
 
@@ -144,8 +145,7 @@ func OnNewGame(c tele.Context) error {
 		return nil
 	}
 
-	player, _ := dbhandler.InsertUserIfNotExist(int(c.Sender().ID), getFullName(c.Sender()), c.Sender().Username)
-
+	player := getPlayer(c)
 	game, _ := dbhandler.GetGame(group.GameId)
 	game.Reset()
 	game.AddUserToGame(player.Id)
@@ -185,8 +185,7 @@ func OnManualGameSelect(c tele.Context) error {
 		return nil
 	}
 
-	player, _ := dbhandler.InsertUserIfNotExist(int(c.Callback().Sender.ID), getFullName(c.Callback().Sender), c.Callback().Sender.Username)
-
+	player := getPlayer(c)
 	game, _ := dbhandler.GetGame(group.GameId)
 
 	if game.WhoStarted != player.Id {
@@ -194,6 +193,7 @@ func OnManualGameSelect(c tele.Context) error {
 		return nil
 	}
 
+	game.MessageId = c.Message().ID
 	game.Type = dbhandler.GameTypeManual
 	dbhandler.UpdateGame(game)
 
@@ -206,18 +206,18 @@ func OnJoinGame(c tele.Context) error {
 	group, _ := dbhandler.GetGp(int(c.Chat().ID))
 	game, _ := dbhandler.GetGame(group.GameId)
 	if game.Status == dbhandler.GameStatusFinished {
-		c.Respond(&tele.CallbackResponse{Text: MsgNoPlayingGame})
+		notifyPlayer(c, MsgNoPlayingGame)
 		return nil
 	}
-	player, _ := dbhandler.InsertUserIfNotExist(int(c.Callback().Sender.ID), getFullName(c.Callback().Sender), c.Callback().Sender.Username)
 
+	player := getPlayer(c)
 	if isPlaying, _ := game.IsUserPlaying(player.Id); isPlaying {
-		c.Respond(&tele.CallbackResponse{Text: MsgAlreadyInGame})
+		notifyPlayer(c, MsgAlreadyInGame)
 		return nil
 	}
 
 	game.AddUserToGame(player.Id)
-	c.Respond(&tele.CallbackResponse{Text: MsgSuccessfulJoin})
+	notifyPlayer(c, MsgSuccessfulJoin)
 
 	editPlayersList(c, game)
 
@@ -228,23 +228,23 @@ func OnLeaveGame(c tele.Context) error {
 	group, _ := dbhandler.GetGp(int(c.Chat().ID))
 	game, _ := dbhandler.GetGame(group.GameId)
 	if game.Status == dbhandler.GameStatusFinished {
-		c.Respond(&tele.CallbackResponse{Text: MsgNoPlayingGame})
+		notifyPlayer(c, MsgNoPlayingGame)
 		return nil
 	}
-	player, _ := dbhandler.InsertUserIfNotExist(int(c.Callback().Sender.ID), getFullName(c.Callback().Sender), c.Callback().Sender.Username)
+	player := getPlayer(c)
 
 	if game.WhoStarted == player.Id {
-		c.Respond(&tele.CallbackResponse{Text: MsgStarterCantLeave})
+		notifyPlayer(c, MsgStarterCantLeave)
 		return nil
 	}
 
 	if isPlaying, _ := game.IsUserPlaying(player.Id); !isPlaying {
-		c.Respond(&tele.CallbackResponse{Text: MsgNotInGame})
+		notifyPlayer(c, MsgNotInGame)
 		return nil
 	}
 
 	game.RemoveUserFromGame(player.Id)
-	c.Respond(&tele.CallbackResponse{Text: MsgSuccessfulLeave})
+	notifyPlayer(c, MsgSuccessfulLeave)
 
 	editPlayersList(c, game)
 
@@ -258,8 +258,8 @@ func OnStartGame(c tele.Context) error {
 		c.Respond(&tele.CallbackResponse{Text: MsgNoPlayingGame})
 		return nil
 	}
-	player, _ := dbhandler.InsertUserIfNotExist(int(c.Callback().Sender.ID), getFullName(c.Callback().Sender), c.Callback().Sender.Username)
 
+	player := getPlayer(c)
 	if game.WhoStarted != player.Id {
 		c.Respond(&tele.CallbackResponse{Text: MsgOnlyStarterCan})
 		return nil
@@ -270,9 +270,53 @@ func OnStartGame(c tele.Context) error {
 		return nil
 	}
 
+	game.Status = dbhandler.GameStatusPlaying
+	dbhandler.UpdateGame(game)
+
 	p1, p2, _ := game.TwoRandomPlayers()
 
 	c.Edit(fmt.Sprintf(MsgManualGame, getNickName(p1), getNickName(p2)), ManualGameSelector)
+
+	return nil
+}
+
+func OnRoll(c tele.Context) error {
+	group, _ := dbhandler.GetGp(int(c.Chat().ID))
+	game, _ := dbhandler.GetGame(group.GameId)
+	if game.Status != dbhandler.GameStatusPlaying {
+		notifyPlayer(c, MsgNoPlayingGame)
+		return nil
+	}
+
+	p1, p2, _ := game.TwoRandomPlayers()
+
+	if c.Callback() != nil {
+		c.Edit(fmt.Sprintf(MsgManualGame, getNickName(p1), getNickName(p2)), ManualGameSelector)
+	} else {
+		c.Send(fmt.Sprintf(MsgManualGame, getNickName(p1), getNickName(p2)))
+	}
+
+	return nil
+}
+
+func OnEndGame(c tele.Context) error {
+	group, _ := dbhandler.GetGp(int(c.Chat().ID))
+	game, _ := dbhandler.GetGame(group.GameId)
+	if game.Status != dbhandler.GameStatusPlaying {
+		c.Respond(&tele.CallbackResponse{Text: MsgNoPlayingGame})
+		return nil
+	}
+
+	player := getPlayer(c)
+	if game.WhoStarted != player.Id {
+		c.Respond(&tele.CallbackResponse{Text: MsgOnlyStarterCan})
+		return nil
+	}
+
+	game.Status = dbhandler.GameStatusFinished
+	dbhandler.UpdateGame(game)
+
+	c.Edit(MsgGameEnded)
 
 	return nil
 }
@@ -293,6 +337,7 @@ func getNickName(u *dbhandler.User) string {
 }
 
 func editPlayersList(c tele.Context, game *dbhandler.Game) error {
+	msg := tele.StoredMessage{ChatID: int64(game.GroupId), MessageID: strconv.Itoa(game.MessageId)}
 	if game.Status == dbhandler.GameStatusPending {
 		players, err := game.Players()
 		if err != nil {
@@ -303,7 +348,26 @@ func editPlayersList(c tele.Context, game *dbhandler.Game) error {
 		for _, p := range players {
 			playersString += getNickName(p) + "\n"
 		}
-		c.Edit(fmt.Sprintf(MsgPlayersList, playersString), PendingMenuSelector)
+		c.Bot().Edit(&msg, fmt.Sprintf(MsgPlayersList, playersString), PendingMenuSelector)
 	}
+
 	return nil
+}
+
+func notifyPlayer(c tele.Context, msg string) error {
+	if c.Callback() == nil {
+		return c.Reply(msg)
+	}
+
+	return c.Respond(&tele.CallbackResponse{Text: msg})
+}
+
+func getPlayer(c tele.Context) *dbhandler.User {
+	var player *dbhandler.User
+	if c.Callback() == nil {
+		player, _ = dbhandler.InsertUserIfNotExist(int(c.Sender().ID), getFullName(c.Sender()), c.Sender().Username)
+	} else {
+		player, _ = dbhandler.InsertUserIfNotExist(int(c.Callback().Sender.ID), getFullName(c.Callback().Sender), c.Callback().Sender.Username)
+	}
+	return player
 }

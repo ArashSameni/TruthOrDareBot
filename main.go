@@ -53,12 +53,22 @@ func main() {
 
 	b.Handle("/start", handlers.OnStart)
 	b.Handle("/AddGp", handlers.OnAddGp)
-	b.Handle("/NewGame", handlers.OnNewGame)
+	b.Handle("/New", handlers.OnNewGame)
+
 	b.Handle(&handlers.BtnAutoGameType, handlers.OnAutoGameSelect)
 	b.Handle(&handlers.BtnManualGameType, handlers.OnManualGameSelect)
 	b.Handle(&handlers.BtnStartGame, handlers.OnStartGame)
+
+	b.Handle("/Join", handlers.OnJoinGame)
 	b.Handle(&handlers.BtnJoinGame, handlers.OnJoinGame)
+
+	b.Handle("/Leave", handlers.OnLeaveGame)
 	b.Handle(&handlers.BtnLeaveGame, handlers.OnLeaveGame)
+
+	b.Handle("/Roll", handlers.OnRoll)
+	b.Handle(&handlers.BtnRoll, handlers.OnRoll)
+
+	b.Handle(&handlers.BtnEndGame, handlers.OnEndGame)
 
 	fmt.Println("Bot started")
 	log.Print("Bot started")

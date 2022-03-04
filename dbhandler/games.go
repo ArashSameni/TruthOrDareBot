@@ -24,6 +24,7 @@ type Game struct {
 	Status        int
 	WhoStarted    int
 	CurrentPlayer int
+	MessageId     int
 }
 
 func InsertGame(groupId, gameType, status, whoStarted, currentPlayer int) (*Game, error) {
@@ -42,7 +43,7 @@ func InsertGame(groupId, gameType, status, whoStarted, currentPlayer int) (*Game
 	}
 
 	id, err := res.LastInsertId()
-	return &Game{int(id), groupId, gameType, status, whoStarted, currentPlayer}, err
+	return &Game{int(id), groupId, gameType, status, whoStarted, currentPlayer, NIL}, err
 }
 
 func ExistsGame(gameId int) (bool, error) {
@@ -71,7 +72,7 @@ func GetGame(gameId int) (*Game, error) {
 
 	game := &Game{}
 	rows.Next()
-	err = rows.Scan(&game.Id, &game.GroupId, &game.Type, &game.Status, &game.WhoStarted, &game.CurrentPlayer)
+	err = rows.Scan(&game.Id, &game.GroupId, &game.Type, &game.Status, &game.WhoStarted, &game.CurrentPlayer, &game.MessageId)
 	if err != nil {
 		return nil, err
 	}
@@ -84,12 +85,12 @@ func UpdateGame(game *Game) error {
 		return ErrDBNotInitialized
 	}
 
-	stmt, err := db.Prepare("UPDATE Games SET GroupId=?, Type=?, Status=?, WhoStarted=?, CurrentPlayer=? WHERE Id=?")
+	stmt, err := db.Prepare("UPDATE Games SET GroupId=?, Type=?, Status=?, WhoStarted=?, CurrentPlayer=?, MessageId=? WHERE Id=?")
 	if err != nil {
 		return err
 	}
 
-	res, err := stmt.Exec(game.GroupId, game.Type, game.Status, game.WhoStarted, game.CurrentPlayer, game.Id)
+	res, err := stmt.Exec(game.GroupId, game.Type, game.Status, game.WhoStarted, game.CurrentPlayer, game.MessageId, game.Id)
 	if err != nil {
 		return err
 	}
@@ -102,6 +103,7 @@ func (g *Game) Reset() error {
 	g.Status = GameStatusPending
 	g.WhoStarted = NIL
 	g.CurrentPlayer = NIL
+	g.MessageId = NIL
 	err := UpdateGame(g)
 	if err != nil {
 		return err
@@ -171,6 +173,7 @@ func (g *Game) Players() (players []*User, err error) {
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	for rows.Next() {
 		var playerId int
@@ -195,6 +198,7 @@ func (g *Game) PlayersCount() int {
 	if err != nil {
 		return NIL
 	}
+	defer rows.Close()
 
 	var count int
 	rows.Next()
@@ -211,6 +215,7 @@ func (g *Game) TwoRandomPlayers() (a *User, b *User, err error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	defer rows.Close()
 
 	for rows.Next() {
 		var playerId int
