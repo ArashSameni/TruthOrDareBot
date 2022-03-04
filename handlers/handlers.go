@@ -224,18 +224,18 @@ func OnStartGame(c tele.Context) error {
 	group, _ := dbhandler.GetGp(int(c.Chat().ID))
 	game, _ := dbhandler.GetGame(group.GameId)
 	if game.Status != dbhandler.GameStatusPending {
-		c.Respond(&tele.CallbackResponse{Text: MsgNoPlayingGame})
+		notifyPlayer(c, MsgNoPlayingGame)
 		return nil
 	}
 
 	player := getPlayer(c)
 	if game.WhoStarted != player.Id {
-		c.Respond(&tele.CallbackResponse{Text: MsgOnlyStarterCan})
+		notifyPlayer(c, MsgOnlyStarterCan)
 		return nil
 	}
 
 	if game.PlayersCount() < MinimumPlayersForStart {
-		c.Respond(&tele.CallbackResponse{Text: MsgNotEnoughPlayers})
+		notifyPlayer(c, MsgNotEnoughPlayers)
 		return nil
 	}
 
@@ -244,7 +244,11 @@ func OnStartGame(c tele.Context) error {
 
 	p1, p2, _ := game.TwoRandomPlayers()
 
-	c.Edit(fmt.Sprintf(MsgManualGame, getNickName(p1), getNickName(p2)), ManualGameSelector)
+	msg := tele.StoredMessage{ChatID: int64(game.GroupId), MessageID: strconv.Itoa(game.MessageId)}
+	c.Bot().Edit(&msg, fmt.Sprintf(MsgManualGame, getNickName(p1), getNickName(p2)), ManualGameSelector)
+	if c.Callback() == nil {
+		c.Send(fmt.Sprintf(MsgManualGame, getNickName(p1), getNickName(p2)))
+	}
 
 	return nil
 }
@@ -272,20 +276,21 @@ func OnEndGame(c tele.Context) error {
 	group, _ := dbhandler.GetGp(int(c.Chat().ID))
 	game, _ := dbhandler.GetGame(group.GameId)
 	if game.Status != dbhandler.GameStatusPlaying {
-		c.Respond(&tele.CallbackResponse{Text: MsgNoPlayingGame})
+		notifyPlayer(c, MsgNoPlayingGame)
 		return nil
 	}
 
 	player := getPlayer(c)
 	if game.WhoStarted != player.Id {
-		c.Respond(&tele.CallbackResponse{Text: MsgOnlyStarterCan})
+		notifyPlayer(c, MsgOnlyStarterCan)
 		return nil
 	}
 
 	game.Status = dbhandler.GameStatusFinished
 	dbhandler.UpdateGame(game)
 
-	c.Edit(MsgGameEnded)
+	msg := tele.StoredMessage{ChatID: int64(game.GroupId), MessageID: strconv.Itoa(game.MessageId)}
+	c.Bot().Edit(&msg, MsgGameEnded)
 
 	return nil
 }

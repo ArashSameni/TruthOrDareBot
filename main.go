@@ -57,6 +57,8 @@ func main() {
 
 	b.Handle(&handlers.BtnAutoGameType, handlers.OnAutoGameSelect)
 	b.Handle(&handlers.BtnManualGameType, handlers.OnManualGameSelect)
+
+	b.Handle("/Start", handlers.OnStartGame)
 	b.Handle(&handlers.BtnStartGame, handlers.OnStartGame)
 
 	b.Handle("/Join", handlers.OnJoinGame)
@@ -68,6 +70,7 @@ func main() {
 	b.Handle("/Roll", handlers.OnRoll)
 	b.Handle(&handlers.BtnRoll, handlers.OnRoll)
 
+	b.Handle("/End", handlers.OnEndGame)
 	b.Handle(&handlers.BtnEndGame, handlers.OnEndGame)
 
 	fmt.Println("Bot started")
