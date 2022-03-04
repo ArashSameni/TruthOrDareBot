@@ -12,17 +12,20 @@ import (
 
 // Inline reply markups
 var (
-	GameTypeSelector   = &tele.ReplyMarkup{}
-	ManualGameSelector = &tele.ReplyMarkup{}
+	GameTypeSelector    = &tele.ReplyMarkup{}
+	PendingMenuSelector = &tele.ReplyMarkup{}
+	ManualGameSelector  = &tele.ReplyMarkup{}
 )
 
 // Inline buttons
 var (
 	BtnAutoGameType   = GameTypeSelector.Data("Auto", "autoGameMode")
 	BtnManualGameType = GameTypeSelector.Data("Manual", "manualGameMode")
+	BtnStartGame      = GameTypeSelector.Data("StartGame", "startGame")
 	BtnJoinGame       = GameTypeSelector.Data("Join", "joinGame")
 	BtnLeaveGame      = GameTypeSelector.Data("Leave", "leaveGame")
 	BtnEndGame        = GameTypeSelector.Data("End game", "endGame")
+	BtnRoll           = GameTypeSelector.Data("Roll", "roll")
 )
 
 // Bot response messages
@@ -32,27 +35,36 @@ var (
 	MsgGpAlreadyExist = `گروه از قبل اضافه شده است`
 	MsgGpIsNotAdded   = `گروه اضافه نشده است`
 	MsgSelectGameType = `لطفا نوع بازی را مشخص کنید`
-	MsgManualGame     = `بازی با موفقیت ساخته شد.
+	MsgPlayersList    = `بازی با موفقیت ساخته شد.
 بازیکنان:
 %s`
-	MsgAlreadyPlaying       = `یک بازی از قبل در حال اجرا است`
-	MsgNoPlayingGame        = `بازی ای در جریان نیست`
-	MsgAlreadyInGame        = `شما از قبل در بازی هستید`
-	MsgSuccessfulJoin       = `با موفقیت به بازی اضافه شدید`
-	MsgSuccessfulLeave      = `با موفقیت از بازی خارج شدید`
-	MsgNotInGame            = `شما در بازی نمیباشید`
-	MsgStarterCantLeave     = `شما سازنده بازی هستید`
-	MsgStarterCanChooseMode = `فقط سازنده بازی میتواند مود را انتخاب کند`
+	MsgAlreadyPlaying   = `یک بازی از قبل در حال اجرا است`
+	MsgNoPlayingGame    = `بازی ای در جریان نیست`
+	MsgAlreadyInGame    = `شما از قبل در بازی هستید`
+	MsgSuccessfulJoin   = `با موفقیت به بازی اضافه شدید`
+	MsgSuccessfulLeave  = `با موفقیت از بازی خارج شدید`
+	MsgNotInGame        = `شما در بازی نمیباشید`
+	MsgStarterCantLeave = `شما سازنده بازی هستید`
+	MsgOnlyStarterCan   = `فقط سازنده بازی به این گزینه دسترسی دارد`
+	MsgNotEnoughPlayers = `تعداد بازیکنان کافی نمیباشد`
+	MsgManualGame       = `%s باید از %s بپرسه`
 )
+
+const MinimumPlayersForStart = 2
 
 func init() {
 	GameTypeSelector.Inline(
 		GameTypeSelector.Row(BtnAutoGameType, BtnManualGameType),
 	)
 
-	ManualGameSelector.Inline(
+	PendingMenuSelector.Inline(
+		GameTypeSelector.Row(BtnStartGame),
 		GameTypeSelector.Row(BtnJoinGame, BtnLeaveGame),
-		GameTypeSelector.Row(BtnEndGame),
+	)
+
+	ManualGameSelector.Inline(
+		GameTypeSelector.Row(BtnRoll),
+		GameTypeSelector.Row(BtnLeaveGame),
 	)
 }
 
@@ -178,14 +190,14 @@ func OnManualGameSelect(c tele.Context) error {
 	game, _ := dbhandler.GetGame(group.GameId)
 
 	if game.WhoStarted != player.Id {
-		c.Respond(&tele.CallbackResponse{Text: MsgStarterCanChooseMode})
+		c.Respond(&tele.CallbackResponse{Text: MsgOnlyStarterCan})
 		return nil
 	}
 
 	game.Type = dbhandler.GameTypeManual
 	dbhandler.UpdateGame(game)
 
-	c.Edit(fmt.Sprintf(MsgManualGame, getNickName(player)), ManualGameSelector)
+	c.Edit(fmt.Sprintf(MsgPlayersList, getNickName(player)), PendingMenuSelector)
 
 	return nil
 }
@@ -239,6 +251,32 @@ func OnLeaveGame(c tele.Context) error {
 	return nil
 }
 
+func OnStartGame(c tele.Context) error {
+	group, _ := dbhandler.GetGp(int(c.Chat().ID))
+	game, _ := dbhandler.GetGame(group.GameId)
+	if game.Status != dbhandler.GameStatusPending {
+		c.Respond(&tele.CallbackResponse{Text: MsgNoPlayingGame})
+		return nil
+	}
+	player, _ := dbhandler.InsertUserIfNotExist(int(c.Callback().Sender.ID), getFullName(c.Callback().Sender), c.Callback().Sender.Username)
+
+	if game.WhoStarted != player.Id {
+		c.Respond(&tele.CallbackResponse{Text: MsgOnlyStarterCan})
+		return nil
+	}
+
+	if game.PlayersCount() < MinimumPlayersForStart {
+		c.Respond(&tele.CallbackResponse{Text: MsgNotEnoughPlayers})
+		return nil
+	}
+
+	p1, p2, _ := game.TwoRandomPlayers()
+
+	c.Edit(fmt.Sprintf(MsgManualGame, getNickName(p1), getNickName(p2)), ManualGameSelector)
+
+	return nil
+}
+
 func getFullName(u *tele.User) string {
 	fullName := u.FirstName
 	if u.LastName != "" {
@@ -265,7 +303,7 @@ func editPlayersList(c tele.Context, game *dbhandler.Game) error {
 		for _, p := range players {
 			playersString += getNickName(p) + "\n"
 		}
-		c.Edit(fmt.Sprintf(MsgManualGame, playersString), ManualGameSelector)
+		c.Edit(fmt.Sprintf(MsgPlayersList, playersString), PendingMenuSelector)
 	}
 	return nil
 }

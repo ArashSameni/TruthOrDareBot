@@ -189,3 +189,47 @@ func (g *Game) Players() (players []*User, err error) {
 
 	return players, nil
 }
+
+func (g *Game) PlayersCount() int {
+	rows, err := db.Query("SELECT COUNT(UserId) FROM GamesUsers WHERE GameId=" + strconv.Itoa(g.Id))
+	if err != nil {
+		return NIL
+	}
+
+	var count int
+	rows.Next()
+	err = rows.Scan(&count)
+	if err != nil {
+		return NIL
+	}
+
+	return count
+}
+
+func (g *Game) TwoRandomPlayers() (a *User, b *User, err error) {
+	rows, err := db.Query("SELECT UserId FROM GamesUsers WHERE GameId=" + strconv.Itoa(g.Id) + " ORDER BY RANDOM() LIMIT 2")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	for rows.Next() {
+		var playerId int
+		err = rows.Scan(&playerId)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		player, err := GetUser(playerId)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		if a == nil {
+			a = player
+		} else {
+			b = player
+		}
+	}
+
+	return a, b, nil
+}

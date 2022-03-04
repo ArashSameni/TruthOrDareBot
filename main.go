@@ -56,6 +56,7 @@ func main() {
 	b.Handle("/NewGame", handlers.OnNewGame)
 	b.Handle(&handlers.BtnAutoGameType, handlers.OnAutoGameSelect)
 	b.Handle(&handlers.BtnManualGameType, handlers.OnManualGameSelect)
+	b.Handle(&handlers.BtnStartGame, handlers.OnStartGame)
 	b.Handle(&handlers.BtnJoinGame, handlers.OnJoinGame)
 	b.Handle(&handlers.BtnLeaveGame, handlers.OnLeaveGame)
 
