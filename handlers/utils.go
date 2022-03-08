@@ -89,3 +89,32 @@ func getPlayer(c tele.Context) *dbhandler.User {
 	}
 	return player
 }
+
+func handleGameSelect(c tele.Context, gameType int) error {
+	if !checkIsGp(c) {
+		return nil
+	}
+	if !checkIsGpAdded(c) {
+		return nil
+	}
+	group, _ := dbhandler.GetGp(int(c.Chat().ID))
+	if checkAlreadyPlaying(c, group) {
+		return nil
+	}
+
+	player := getPlayer(c)
+	game, _ := dbhandler.GetGame(group.GameId)
+
+	if game.WhoStarted != player.Id {
+		c.Respond(&tele.CallbackResponse{Text: MsgOnlyStarterCan})
+		return nil
+	}
+
+	game.MessageId = c.Message().ID
+	game.Type = gameType
+	dbhandler.UpdateGame(game)
+
+	c.Edit(fmt.Sprintf(MsgPlayersList, getNickName(player)), PendingMenuSelector)
+
+	return nil
+}

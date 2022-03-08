@@ -46,7 +46,7 @@ var (
 	MsgStarterCantLeave = `شما سازنده بازی هستید`
 	MsgOnlyStarterCan   = `فقط سازنده بازی به این گزینه دسترسی دارد`
 	MsgNotEnoughPlayers = `تعداد بازیکنان کافی نمیباشد`
-	MsgManualGame       = `%s باید از %s بپرسه`
+	MsgManualGame       = `خب %s باید از %s بپرسه`
 	MsgGameEnded        = `بازی به پایان رسید`
 )
 
@@ -126,49 +126,12 @@ func OnNewGame(c tele.Context) error {
 	return nil
 }
 
-//TODO: Complete this shit
 func OnAutoGameSelect(c tele.Context) error {
-	if !checkIsGp(c) {
-		return nil
-	}
-	if !checkIsGpAdded(c) {
-		return nil
-	}
-	group, _ := dbhandler.GetGp(int(c.Chat().ID))
-	if checkAlreadyPlaying(c, group) {
-		return nil
-	}
-
-	return nil
+	return handleGameSelect(c, dbhandler.GameTypeAuto)
 }
 
 func OnManualGameSelect(c tele.Context) error {
-	if !checkIsGp(c) {
-		return nil
-	}
-	if !checkIsGpAdded(c) {
-		return nil
-	}
-	group, _ := dbhandler.GetGp(int(c.Chat().ID))
-	if checkAlreadyPlaying(c, group) {
-		return nil
-	}
-
-	player := getPlayer(c)
-	game, _ := dbhandler.GetGame(group.GameId)
-
-	if game.WhoStarted != player.Id {
-		c.Respond(&tele.CallbackResponse{Text: MsgOnlyStarterCan})
-		return nil
-	}
-
-	game.MessageId = c.Message().ID
-	game.Type = dbhandler.GameTypeManual
-	dbhandler.UpdateGame(game)
-
-	c.Edit(fmt.Sprintf(MsgPlayersList, getNickName(player)), PendingMenuSelector)
-
-	return nil
+	return handleGameSelect(c, dbhandler.GameTypeManual)
 }
 
 func OnJoinGame(c tele.Context) error {
@@ -223,7 +186,11 @@ func OnLeaveGame(c tele.Context) error {
 func OnStartGame(c tele.Context) error {
 	group, _ := dbhandler.GetGp(int(c.Chat().ID))
 	game, _ := dbhandler.GetGame(group.GameId)
-	if game.Status != dbhandler.GameStatusPending {
+	if game.Status == dbhandler.GameStatusPlaying {
+		notifyPlayer(c, MsgAlreadyPlaying)
+		return nil
+	}
+	if game.Status == dbhandler.GameStatusFinished {
 		notifyPlayer(c, MsgNoPlayingGame)
 		return nil
 	}
@@ -291,6 +258,7 @@ func OnEndGame(c tele.Context) error {
 
 	msg := tele.StoredMessage{ChatID: int64(game.GroupId), MessageID: strconv.Itoa(game.MessageId)}
 	c.Bot().Edit(&msg, MsgGameEnded)
+	c.Send(MsgGameEnded)
 
 	return nil
 }
