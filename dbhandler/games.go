@@ -238,3 +238,25 @@ func (g *Game) TwoRandomPlayers() (a *User, b *User, err error) {
 
 	return a, b, nil
 }
+
+func (g *Game) RandomPlayer() (*User, error) {
+	rows, err := db.Query("SELECT UserId FROM GamesUsers WHERE GameId=" + strconv.Itoa(g.Id) + " ORDER BY RANDOM() LIMIT 1")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	rows.Next()
+	var playerId int
+	err = rows.Scan(&playerId)
+	if err != nil {
+		return nil, err
+	}
+
+	player, err := GetUser(playerId)
+	if err != nil {
+		return nil, err
+	}
+
+	return player, nil
+}

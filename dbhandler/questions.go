@@ -4,6 +4,8 @@ package dbhandler
 const (
 	QuestionTypeTruth = iota
 	QuestionTypeDare
+	QuestionTypeTruth18
+	QuestionTypeDare18
 )
 
 type Question struct {
@@ -64,7 +66,7 @@ func UpdateQuestion(question *Question) error {
 	return err
 }
 
-func (q *Question) Random() (*Question, error) {
+func RandomQuestion() (*Question, error) {
 	rows, err := db.Query("SELECT * FROM Questions ORDER BY RANDOM() LIMIT 1")
 	if err != nil {
 		return nil, err

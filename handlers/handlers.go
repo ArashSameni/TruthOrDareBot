@@ -14,6 +14,7 @@ var (
 	GameTypeSelector    = &tele.ReplyMarkup{}
 	PendingMenuSelector = &tele.ReplyMarkup{}
 	ManualGameSelector  = &tele.ReplyMarkup{}
+	AutoGameSelector    = &tele.ReplyMarkup{}
 )
 
 // Inline buttons
@@ -25,6 +26,7 @@ var (
 	BtnLeaveGame      = GameTypeSelector.Data("Leave", "leaveGame")
 	BtnEndGame        = GameTypeSelector.Data("End game", "endGame")
 	BtnRoll           = GameTypeSelector.Data("Roll", "roll")
+	BtnNext           = GameTypeSelector.Data("Next", "next")
 )
 
 // Bot response messages
@@ -47,7 +49,9 @@ var (
 	MsgOnlyStarterCan   = `فقط سازنده بازی به این گزینه دسترسی دارد`
 	MsgNotEnoughPlayers = `تعداد بازیکنان کافی نمیباشد`
 	MsgManualGame       = `خب %s باید از %s بپرسه`
-	MsgGameEnded        = `بازی به پایان رسید`
+	MsgAutoGame         = `خب %s جان ☺️
+%s`
+	MsgGameEnded = `بازی به پایان رسید`
 )
 
 const MinimumPlayersForStart = 2
@@ -64,6 +68,11 @@ func init() {
 
 	ManualGameSelector.Inline(
 		GameTypeSelector.Row(BtnRoll),
+		GameTypeSelector.Row(BtnEndGame),
+	)
+
+	AutoGameSelector.Inline(
+		GameTypeSelector.Row(BtnNext),
 		GameTypeSelector.Row(BtnEndGame),
 	)
 }
@@ -207,14 +216,25 @@ func OnStartGame(c tele.Context) error {
 	}
 
 	game.Status = dbhandler.GameStatusPlaying
+	game.CurrentPlayer = player.Id
 	dbhandler.UpdateGame(game)
+	if game.Type == dbhandler.GameTypeAuto {
+		p, _ := game.RandomPlayer()
+		q, _ := dbhandler.RandomQuestion()
 
-	p1, p2, _ := game.TwoRandomPlayers()
+		msg := tele.StoredMessage{ChatID: int64(game.GroupId), MessageID: strconv.Itoa(game.MessageId)}
+		c.Bot().Edit(&msg, fmt.Sprintf(MsgAutoGame, getNickName(p), q.Content), AutoGameSelector)
+		if c.Callback() == nil {
+			c.Send(fmt.Sprintf(MsgAutoGame, getNickName(p), q.Content))
+		}
+	} else if game.Type == dbhandler.GameTypeManual {
+		p1, p2, _ := game.TwoRandomPlayers()
 
-	msg := tele.StoredMessage{ChatID: int64(game.GroupId), MessageID: strconv.Itoa(game.MessageId)}
-	c.Bot().Edit(&msg, fmt.Sprintf(MsgManualGame, getNickName(p1), getNickName(p2)), ManualGameSelector)
-	if c.Callback() == nil {
-		c.Send(fmt.Sprintf(MsgManualGame, getNickName(p1), getNickName(p2)))
+		msg := tele.StoredMessage{ChatID: int64(game.GroupId), MessageID: strconv.Itoa(game.MessageId)}
+		c.Bot().Edit(&msg, fmt.Sprintf(MsgManualGame, getNickName(p1), getNickName(p2)), ManualGameSelector)
+		if c.Callback() == nil {
+			c.Send(fmt.Sprintf(MsgManualGame, getNickName(p1), getNickName(p2)))
+		}
 	}
 
 	return nil
@@ -230,10 +250,29 @@ func OnRoll(c tele.Context) error {
 
 	p1, p2, _ := game.TwoRandomPlayers()
 
-	if c.Callback() != nil {
-		c.Edit(fmt.Sprintf(MsgManualGame, getNickName(p1), getNickName(p2)), ManualGameSelector)
-	} else {
+	msg := tele.StoredMessage{ChatID: int64(game.GroupId), MessageID: strconv.Itoa(game.MessageId)}
+	c.Bot().Edit(&msg, fmt.Sprintf(MsgManualGame, getNickName(p1), getNickName(p2)), ManualGameSelector)
+	if c.Callback() == nil {
 		c.Send(fmt.Sprintf(MsgManualGame, getNickName(p1), getNickName(p2)))
+	}
+
+	return nil
+}
+
+func OnNextQuestion(c tele.Context) error {
+	group, _ := dbhandler.GetGp(int(c.Chat().ID))
+	game, _ := dbhandler.GetGame(group.GameId)
+	if game.Status != dbhandler.GameStatusPlaying {
+		notifyPlayer(c, MsgNoPlayingGame)
+		return nil
+	}
+	p, _ := game.RandomPlayer()
+	q, _ := dbhandler.RandomQuestion()
+
+	msg := tele.StoredMessage{ChatID: int64(game.GroupId), MessageID: strconv.Itoa(game.MessageId)}
+	c.Bot().Edit(&msg, fmt.Sprintf(MsgAutoGame, getNickName(p), q.Content), AutoGameSelector)
+	if c.Callback() == nil {
+		c.Send(fmt.Sprintf(MsgAutoGame, getNickName(p), q.Content))
 	}
 
 	return nil
